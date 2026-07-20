@@ -101,6 +101,10 @@ Index row:
 
 Everything lives in `~/.claude/session-tags/`. Plain JSONL, plain shell — inspect, back up, sync, or hand-edit freely.
 
+### Resume behavior
+
+When you resume a session and exit again, `SessionEnd` **replaces the existing row** rather than appending a duplicate — one row per session_id, always. `ended_at` updates to the latest exit time. If the session previously had a manual `/tag`, that tag is preserved across resumes (you don't lose it by not re-running `/tag`).
+
 ---
 
 ## Troubleshooting
