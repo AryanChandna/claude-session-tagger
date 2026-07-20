@@ -23,14 +23,13 @@ Requires `jq`. Optional: `fzf` for the interactive picker.
 /plugin install session-tagger@session-tagger-marketplace
 ```
 
-For the shell helper, either symlink it or add the plugin's `bin/` to your `PATH`:
+Restart your Claude Code session so the `SessionStart` hook fires.
+
+**Shell helper (`claude-resume-tag`):** the plugin's `SessionStart` hook auto-symlinks the helper into `~/.local/bin/` the first time it runs — no manual step needed. If `~/.local/bin` isn't on your `PATH` (most modern setups have it; if `which claude-resume-tag` comes up empty, add this to your shell rc):
 
 ```bash
-ln -s ~/.claude/plugins/cache/session-tagger-marketplace/session-tagger/bin/claude-resume-tag \
-      /usr/local/bin/claude-resume-tag
+export PATH="$HOME/.local/bin:$PATH"
 ```
-
-Restart your Claude Code session so the `SessionStart` hook fires.
 
 ## Usage
 
