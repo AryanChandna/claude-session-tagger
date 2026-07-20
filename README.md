@@ -40,7 +40,9 @@ Inside a Claude Code session:
 /tag payments-refactor
 ```
 
-The tag gets attached to the current session and written to the index when the session ends. If you never run `/tag`, the session is still indexed with its first user message as a fallback label.
+The tag gets attached to the current session and written to the index when the session ends.
+
+**If you never run `/tag`**, the session is still indexed — the plugin auto-derives a tag from a slug of your first user message (e.g. `Refactor the payment retry loop` → `refactor-the-payment-retry-loop`). The row's `tag_source` field records whether the tag was `manual` or `auto`, so you can filter or re-tag later.
 
 List and search:
 
@@ -70,6 +72,7 @@ Index row shape:
   "session_id": "…",
   "cwd": "/Users/you/project",
   "tag": "payments-refactor",
+  "tag_source": "manual",
   "first_msg": "help me refactor the payment retry loop",
   "ended_at": "2026-07-20T14:32:00Z",
   "transcript_path": "/Users/you/.claude/projects/…/…jsonl"
