@@ -68,10 +68,14 @@ else
   elif [ "$count" -eq 1 ]; then
     sid=$(printf '%s' "${rows[0]}" | awk -F'\t' '{print $NF}')
   else
+    echo "(hint: install fzf for an incremental picker — brew install fzf)" >&2
     echo "Multiple matches for '${1:-}' — pick one:" >&2
     i=1
     for r in "${rows[@]}"; do
-      printf '  %2d. %s\n' "$i" "$(printf '%s' "$r" | column -t -s $'\t')" >&2
+      IFS=$'\t' read -r rdate rtag rproj rfirst rsid <<<"$r"
+      # Fixed-width printf so we don't need BSD `column`
+      printf '  %2d. %-10s  %-34s  %-15s  %s\n' \
+        "$i" "$rdate" "${rtag:0:34}" "${rproj:0:15}" "$rfirst" >&2
       i=$((i+1))
     done
     printf 'number> ' >&2
@@ -82,7 +86,6 @@ else
     fi
     sid=$(printf '%s' "${rows[n-1]}" | awk -F'\t' '{print $NF}')
   fi
-  echo "(install fzf for an interactive picker: brew install fzf)" >&2
 fi
 
 exec claude --resume "$sid"
