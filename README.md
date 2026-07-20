@@ -50,12 +50,30 @@ List and search:
 /tags payments        # filter by tag or first-message substring
 ```
 
-Resume from your shell:
+Resume from your shell — three equivalent forms:
 
 ```bash
-claude-resume-tag payments-refactor       # resume newest session with this tag
+claude-resume-tag payments-refactor       # full name
+cr payments-refactor                      # short alias (same command)
 claude-resume-tag                          # fzf picker (if fzf installed)
 claude-resume-tag --list refactor         # print index, filtered, no resume
+```
+
+### Optional: `claude resume` subcommand
+
+If you'd like `claude resume <tag>` to feel like a first-class subcommand, source the shell wrapper from your rc file:
+
+```bash
+echo 'source ~/.claude/plugins/marketplaces/session-tagger-marketplace/bin/claude-wrapper.sh' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Then:
+
+```bash
+claude resume                # fzf picker over all tagged sessions
+claude resume payments       # pre-filtered picker (or exact-match without fzf)
+claude <anything-else>       # unchanged — passes through to the real claude
 ```
 
 ## How it works
