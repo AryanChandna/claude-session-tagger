@@ -56,7 +56,11 @@ if command -v fzf >/dev/null 2>&1; then
   sid=$(printf '%s' "$choice" | awk '{print $NF}')
 else
   # No fzf: substring match, numbered picker if multiple hits.
-  mapfile -t rows < <(format_rows "${1:-}")
+  # (portable read loop — macOS bash 3.2 has no mapfile)
+  rows=()
+  while IFS= read -r line; do
+    rows+=("$line")
+  done < <(format_rows "${1:-}")
   count=${#rows[@]}
   if [ "$count" -eq 0 ]; then
     echo "No sessions match '${1:-}'. Try: claude-resume-tag --list" >&2
