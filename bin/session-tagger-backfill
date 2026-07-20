@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# session-tagger-backfill — one-shot scan of ~/.claude/projects/ that adds
+# every existing session transcript to ~/.claude/session-tags/index.jsonl.
+#
+# Idempotent: sessions already in the index are skipped. Safe to re-run.
+#
+# For each new session it extracts:
+#   - session_id  (from the transcript filename)
+#   - cwd         (from the transcript's own metadata — encoding-safe)
+#   - first_msg   (first real user message, skipping framework meta entries)
+#   - ended_at    (file mtime — best available approximation)
+#   - tag         (auto-derived slug of first_msg, or session-<short-id>)
+#
+# NOTE: we deliberately DON'T use `set -e` here — per-file failures (a
+# malformed transcript, a missing field, etc.) should skip that file and
+# continue with the rest, not abort the whole scan.
+set -uo pipefail
+
+INDEX_DIR="$HOME/.claude/session-tags"
+INDEX_FILE="$INDEX_DIR/index.jsonl"
+PROJECTS_DIR="$HOME/.claude/projects"
+
+mkdir -p "$INDEX_DIR"
+touch "$INDEX_FILE"
+
+if [ ! -d "$PROJECTS_DIR" ]; then
+  echo "No Claude Code project transcripts found at $PROJECTS_DIR." >&2
+  exit 0
+fi
+
+# Portable file-mtime → unix timestamp
+mtime_epoch() {
+  if stat -f "%m" "$1" >/dev/null 2>&1; then
+    stat -f "%m" "$1"        # BSD/macOS
+  else
+    stat -c "%Y" "$1"        # GNU/Linux
+  fi
+}
+
+# Portable unix-timestamp → UTC ISO-8601
+epoch_iso() {
+  if date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ >/dev/null 2>&1; then
+    date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ   # BSD/macOS
+  else
+    date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ  # GNU/Linux
+  fi
+}
+
+slugify() {
+  printf '%s' "$1" \
+    | tr '[:upper:]' '[:lower:]' \
+    | LC_ALL=C sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' \
+    | cut -c1-40 \
+    | sed -E 's/-+$//'
+}
+
+new_count=0
+scanned=0
+skipped=0
+
+# Loop over every transcript. Use find + read so filenames-with-spaces don't
+# break, and so we get zero hits gracefully instead of a literal glob.
+while IFS= read -r -d '' transcript; do
+  scanned=$((scanned + 1))
+  sid=$(basename "$transcript" .jsonl)
+
+  # Skip if this session_id is already indexed.
+  if grep -qF -- "\"session_id\":\"$sid\"" "$INDEX_FILE"; then
+    skipped=$((skipped + 1))
+    continue
+  fi
+
+  # cwd from the transcript itself — encoding-safe (dashes-in-paths problem).
+  cwd=$(jq -r 'select(.cwd) | .cwd' "$transcript" 2>/dev/null | head -1)
+  [ -z "$cwd" ] && { skipped=$((skipped + 1)); continue; }
+
+  # First real user message: skip framework meta entries (<command-name>,
+  # <local-command-caveat>, <system-reminder>, etc.). Strip leading whitespace
+  # before matching, since some framework messages are indented.
+  first_msg=$(
+    jq -r '
+      select(.type == "user" and ((.isMeta // false) | not))
+      | .message.content
+      | if type == "string" then .
+        elif type == "array" then (map(select(.type == "text") | .text) | join(" "))
+        else "" end
+    ' "$transcript" 2>/dev/null \
+      | sed -E 's/^[[:space:]]+//' \
+      | grep -Ev '^<(command-|local-command-caveat|system-reminder)' \
+      | grep -v '^$' \
+      | head -1 \
+      | tr '\n\r\t' '   ' \
+      | cut -c1-120
+  )
+
+  # Auto-tag from first_msg, or fall back to short session id.
+  tag=""
+  if [ -n "$first_msg" ]; then
+    tag=$(slugify "$first_msg")
+  fi
+  [ -z "$tag" ] && tag="session-${sid:0:8}"
+
+  ended_at=$(epoch_iso "$(mtime_epoch "$transcript")")
+
+  jq -nc \
+    --arg sid "$sid" \
+    --arg cwd "$cwd" \
+    --arg tag "$tag" \
+    --arg first "$first_msg" \
+    --arg tp "$transcript" \
+    --arg ts "$ended_at" \
+    '{
+      session_id: $sid,
+      cwd: $cwd,
+      tag: $tag,
+      tag_source: "auto",
+      first_msg: $first,
+      ended_at: $ts,
+      transcript_path: $tp
+    }' >> "$INDEX_FILE"
+
+  new_count=$((new_count + 1))
+done < <(find "$PROJECTS_DIR" -mindepth 2 -maxdepth 2 -name '*.jsonl' -type f -print0)
+
+echo "Scanned $scanned transcript(s), skipped $skipped already-indexed, added $new_count new." >&2
+echo "Total sessions in index: $(wc -l < "$INDEX_FILE" | tr -d ' ')" >&2

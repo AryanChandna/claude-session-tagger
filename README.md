@@ -45,6 +45,16 @@ source ~/.zshrc
 
 That's it.
 
+### Optional: backfill your existing sessions
+
+The plugin only captures sessions that *end* after it's installed. To bring your pre-existing Claude Code sessions into the tag index in one shot:
+
+```bash
+session-tagger-backfill
+```
+
+It scans `~/.claude/projects/`, extracts `cwd` and the first user message from each transcript, auto-derives a tag, and appends any sessions not yet in the index. Idempotent — safe to re-run anytime.
+
 ---
 
 ## Daily use

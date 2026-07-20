@@ -29,16 +29,19 @@ if [ -z "$session_id" ]; then
 fi
 
 # Extract the first user message text (truncated) from the transcript, if any.
+# Skip framework meta entries (<command-name>, <system-reminder>, etc.).
 first_msg=""
 if [ -n "$transcript" ] && [ -f "$transcript" ]; then
   first_msg=$(
     jq -r '
-      select(.type == "user")
+      select(.type == "user" and ((.isMeta // false) | not))
       | .message.content
       | if type == "string" then .
         elif type == "array" then (map(select(.type=="text") | .text) | join(" "))
         else "" end
     ' "$transcript" 2>/dev/null \
+    | sed -E 's/^[[:space:]]+//' \
+    | grep -Ev '^<(command-|local-command-caveat|system-reminder)' \
     | grep -v '^$' \
     | head -1 \
     | tr '\n\r\t' '   ' \

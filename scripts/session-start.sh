@@ -21,7 +21,7 @@ touch "$HOME/.claude/session-tags/index.jsonl"
 plugin_root="${CLAUDE_PLUGIN_ROOT:-}"
 if [ -n "$plugin_root" ]; then
   mkdir -p "$HOME/.local/bin"
-  for name in claude-resume-tag cr; do
+  for name in claude-resume-tag cr session-tagger-backfill; do
     src="$plugin_root/bin/$name"
     dst="$HOME/.local/bin/$name"
     if [ -e "$src" ]; then
