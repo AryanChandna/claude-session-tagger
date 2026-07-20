@@ -49,10 +49,13 @@ format_rows() {
 
 if command -v fzf >/dev/null 2>&1; then
   # Incremental picker; pre-fill --query with any arg the user passed.
+  # --select-1: auto-pick if query narrows to exactly one match
+  # --exit-0:   exit non-zero if zero matches (no picker for no-hits)
   choice=$(
     format_rows "" | column -t -s $'\t' \
-      | fzf --query="${1:-}" --prompt="resume > " --height=40% --reverse --no-sort
-  ) || exit 1
+      | fzf --query="${1:-}" --prompt="resume > " \
+            --height=40% --reverse --no-sort --select-1 --exit-0
+  ) || { echo "No sessions match '${1:-}'." >&2; exit 1; }
   sid=$(printf '%s' "$choice" | awk '{print $NF}')
 else
   # No fzf: substring match, numbered picker if multiple hits.
@@ -85,6 +88,18 @@ else
       exit 1
     fi
     sid=$(printf '%s' "${rows[n-1]}" | awk -F'\t' '{print $NF}')
+  fi
+fi
+
+# Claude Code's --resume is directory-scoped: it only finds sessions started
+# in the current cwd. Look up the session's original cwd and cd there first.
+sess_cwd=$(jq -r --arg sid "$sid" 'select(.session_id == $sid) | .cwd' "$INDEX" | tail -1)
+if [ -n "$sess_cwd" ] && [ "$sess_cwd" != "$PWD" ]; then
+  if [ -d "$sess_cwd" ]; then
+    echo "(cd → $sess_cwd)" >&2
+    cd "$sess_cwd"
+  else
+    echo "warning: session's original cwd '$sess_cwd' no longer exists; trying from $PWD" >&2
   fi
 fi
 

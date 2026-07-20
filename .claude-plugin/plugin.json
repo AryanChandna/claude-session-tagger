@@ -1,6 +1,6 @@
 {
   "name": "session-tagger",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Tag Claude Code sessions with human-readable names and resume them later by tag instead of opaque session IDs.",
   "author": {
     "name": "Aryan Chandna",

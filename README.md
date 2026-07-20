@@ -103,7 +103,8 @@ Everything lives in `~/.claude/session-tags/`. Plain JSONL, plain shell — insp
 
 ### Resume behavior
 
-When you resume a session and exit again, `SessionEnd` **replaces the existing row** rather than appending a duplicate — one row per session_id, always. `ended_at` updates to the latest exit time. If the session previously had a manual `/tag`, that tag is preserved across resumes (you don't lose it by not re-running `/tag`).
+- **Works from any directory.** Claude Code's `--resume` only sees sessions started in the current cwd. `cr` transparently `cd`s into the session's original directory before resuming, so `cr <tag>` works from anywhere. (Prints `(cd → …)` when it moves.) If the original directory no longer exists, `cr` warns and tries from the current cwd.
+- **Dedup on exit.** When you resume a session and exit again, `SessionEnd` **replaces the existing row** rather than appending a duplicate — one row per session_id, always. `ended_at` updates to the latest exit time. If the session previously had a manual `/tag`, that tag is preserved across resumes.
 
 ---
 
