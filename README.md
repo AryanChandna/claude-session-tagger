@@ -1,100 +1,120 @@
 # session-tagger
 
-A [Claude Code](https://docs.claude.com/en/docs/claude-code) plugin that lets you tag sessions with human-readable names and resume them later — no more scrolling through opaque UUIDs in `claude --resume`.
+Tag Claude Code sessions with human-readable names and resume them by tag — no more scrolling through opaque UUIDs.
 
-## Why
+```
+$ cr                                        # opens fzf picker with incremental search
+resume > gpu                                # type letters, list filters live
+> 2026-07-20  can-you-tell-me-why-llms-need-gpu  workspace  can you tell me why llms need gpu
+[Enter → resumes that session]
+```
 
-`claude --resume` shows the first user message and a timestamp. That's fine for "the session I had an hour ago," useless for "the session where I was refactoring payments last week." This plugin adds:
+Every Claude Code session is auto-indexed on exit. You can add explicit tags with `/tag <name>` during a session, or let the plugin auto-derive a tag from your first message. Then find sessions later with a shell command, an fzf picker, or a slash command.
 
-- `/tag <name>` — tag the current session from inside Claude
-- `/tags [query]` — list & search tagged sessions from inside Claude
-- `claude-resume-tag <name>` — shell helper to resume by tag (with optional `fzf` picker)
-- A `SessionEnd` hook that indexes every session automatically, tag or not
+---
 
-Tags and metadata live in `~/.claude/session-tags/index.jsonl` — a plain JSONL file you own, back up, or sync however you want.
+## Install (60 seconds)
 
-## Install
-
-Requires `jq`. Optional: `fzf` for the interactive picker.
+**Prerequisites:** `jq` (required), `fzf` (strongly recommended — enables incremental picker).
 
 ```bash
-# Inside Claude Code:
+brew install jq fzf   # macOS
+```
+
+**In Claude Code:**
+
+```
 /plugin marketplace add https://github.com/AryanChandna/claude-session-tagger
 /plugin install session-tagger@session-tagger-marketplace
 ```
 
-Restart your Claude Code session so the `SessionStart` hook fires.
+Then **exit and start a fresh `claude` session** so the `SessionStart` hook fires. That hook auto-symlinks the shell helpers (`claude-resume-tag` and its short alias `cr`) into `~/.local/bin/`.
 
-**Shell helper (`claude-resume-tag`):** the plugin's `SessionStart` hook auto-symlinks the helper into `~/.local/bin/` the first time it runs — no manual step needed. If `~/.local/bin` isn't on your `PATH` (most modern setups have it; if `which claude-resume-tag` comes up empty, add this to your shell rc):
-
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-## Usage
-
-Inside a Claude Code session:
-
-```
-/tag payments-refactor
-```
-
-The tag gets attached to the current session and written to the index when the session ends.
-
-**If you never run `/tag`**, the session is still indexed — the plugin auto-derives a tag from a slug of your first user message (e.g. `Refactor the payment retry loop` → `refactor-the-payment-retry-loop`). The row's `tag_source` field records whether the tag was `manual` or `auto`, so you can filter or re-tag later.
-
-List and search:
-
-```
-/tags                 # last 30 tagged sessions
-/tags payments        # filter by tag or first-message substring
-```
-
-Resume from your shell — three equivalent forms:
+**PATH check:** if `which cr` comes up empty, add `~/.local/bin` to your PATH:
 
 ```bash
-claude-resume-tag payments-refactor       # full name
-cr payments-refactor                      # short alias (same command)
-claude-resume-tag                          # fzf picker (if fzf installed)
-claude-resume-tag --list refactor         # print index, filtered, no resume
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
 ```
 
-### Optional: `claude resume` subcommand
-
-If you'd like `claude resume <tag>` to feel like a first-class subcommand, source the shell wrapper from your rc file:
+**Optional — enable the `claude resume` subcommand:**
 
 ```bash
 echo 'source ~/.claude/plugins/marketplaces/session-tagger-marketplace/bin/claude-wrapper.sh' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-Then:
+That's it.
+
+---
+
+## Daily use
+
+### From your shell — the main flow
 
 ```bash
-claude resume                # fzf picker over all tagged sessions
-claude resume payments       # pre-filtered picker (or exact-match without fzf)
-claude <anything-else>       # unchanged — passes through to the real claude
+cr                    # incremental fzf picker over every session
+cr gpu                # picker pre-filtered to "gpu" (refine or clear)
+cr --list             # print index as a table, no resume
+cr --list refactor    # print index, filtered, no resume
 ```
+
+If you added the wrapper, these all also work:
+
+```bash
+claude resume         # same picker
+claude resume gpu     # pre-filtered
+claude <anything>     # unchanged — pass-through to real claude
+```
+
+### Inside a Claude session — optional slash commands
+
+```
+/tag payments-refactor    # override the auto-tag for this session
+/tags                     # list recent tagged sessions inline
+/tags gpu                 # filter that list
+```
+
+You **don't need** to run `/tag` — every session is auto-tagged from a slug of your first user message. `/tag` is just for when you want a more memorable name.
+
+---
 
 ## How it works
 
-- **`SessionStart` hook** injects a line into Claude's context: `[session-tagger] Current Claude Code session_id = <uuid>`. This lets the `/tag` command reference the session_id when writing a pending tag file.
-- **`/tag <name>`** writes `<name>` to `~/.claude/session-tags/pending/<session-id>`.
-- **`SessionEnd` hook** reads the pending file (if any), extracts the first user message from the transcript, appends one JSONL row to `~/.claude/session-tags/index.jsonl`, and deletes the pending file.
+1. **`SessionStart` hook** — injects your current `session_id` into Claude's context so `/tag` knows which session to write for. Also idempotently symlinks `cr` and `claude-resume-tag` into `~/.local/bin/`.
+2. **`/tag <name>`** — writes `<name>` to `~/.claude/session-tags/pending/<session-id>`.
+3. **`SessionEnd` hook** — on exit, reads that pending file (if any), pulls the first user message from the transcript, derives an auto-slug if no manual tag was set, and appends one JSONL row to `~/.claude/session-tags/index.jsonl`.
+4. **`cr` / `claude-resume-tag`** — reads the index, matches your query, and execs `claude --resume <session-id>`.
 
-Index row shape:
+Index row:
 
 ```json
 {
-  "session_id": "…",
+  "session_id": "5babcb25-…",
   "cwd": "/Users/you/project",
-  "tag": "payments-refactor",
-  "tag_source": "manual",
-  "first_msg": "help me refactor the payment retry loop",
-  "ended_at": "2026-07-20T14:32:00Z",
+  "tag": "can-you-tell-me-why-llms-need-gpu",
+  "tag_source": "auto",
+  "first_msg": "can you tell me why llms need gpu",
+  "ended_at": "2026-07-20T08:04:18Z",
   "transcript_path": "/Users/you/.claude/projects/…/…jsonl"
 }
 ```
+
+Everything lives in `~/.claude/session-tags/`. Plain JSONL, plain shell — inspect, back up, sync, or hand-edit freely.
+
+---
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `zsh: command not found: cr` | Add `~/.local/bin` to PATH (see Install). |
+| `claude resume` opens a normal Claude session instead of the picker | Wrapper not loaded in current shell — run `source ~/.zshrc` or open a new terminal. |
+| Picker isn't incremental (no live filtering) | fzf isn't installed — `brew install fzf`. |
+| A session doesn't appear in the index | The `SessionEnd` hook only runs when Claude exits cleanly. Force-killing the process (Ctrl-C spam, terminal close, machine crash) skips indexing. |
+| Auto-tags collide (two sessions same slug) | Fine — the picker shows both; `cr <tag>` resolves to the newest by default. Use `/tag <unique-name>` to disambiguate. |
+| Want to remove a session from the index | Hand-edit `~/.claude/session-tags/index.jsonl` — it's plain JSONL, one row per session. |
+
+---
 
 ## Uninstall
 
@@ -102,7 +122,9 @@ Index row shape:
 /plugin uninstall session-tagger
 ```
 
-Your index at `~/.claude/session-tags/` is left untouched — delete it manually if you want a clean slate.
+Your index at `~/.claude/session-tags/` is left in place — delete it manually for a clean slate. Also remove any lines you added to `~/.zshrc` (PATH export, wrapper source) if you no longer want them.
+
+---
 
 ## License
 
