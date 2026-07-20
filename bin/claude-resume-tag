@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# claude-resume-tag — resume a Claude Code session by its tag.
+#
+#   claude-resume-tag <tag>          # resume most recent session with this exact tag
+#   claude-resume-tag                 # interactive picker over all tagged sessions
+#   claude-resume-tag --list [query]  # print index (optionally filtered), no resume
+#
+# Requires: jq. Optional: fzf (used for interactive picker if present).
+set -euo pipefail
+
+INDEX="$HOME/.claude/session-tags/index.jsonl"
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "claude-resume-tag: jq is required" >&2
+  exit 1
+fi
+
+if [ ! -s "$INDEX" ]; then
+  echo "No tagged sessions yet ($INDEX is empty)." >&2
+  exit 1
+fi
+
+if [ "${1:-}" = "--list" ]; then
+  shift
+  query="${1:-}"
+  jq -r --arg q "$query" '
+    select($q == "" or ((.tag // "") | ascii_downcase | contains($q | ascii_downcase))
+                     or ((.first_msg // "") | ascii_downcase | contains($q | ascii_downcase)))
+    | [.ended_at[0:10], (.tag // "-"), (.cwd | split("/") | last), (.first_msg // "")[0:60], .session_id]
+    | @tsv
+  ' "$INDEX" | column -t -s $'\t'
+  exit 0
+fi
+
+pick_sid() {
+  local tag="$1"
+  jq -r --arg t "$tag" 'select((.tag // "") == $t) | .session_id' "$INDEX" | tail -1
+}
+
+if [ $# -ge 1 ]; then
+  sid=$(pick_sid "$1")
+  if [ -z "$sid" ]; then
+    echo "No session found with tag '$1'." >&2
+    echo "Try: claude-resume-tag --list $1" >&2
+    exit 1
+  fi
+else
+  if ! command -v fzf >/dev/null 2>&1; then
+    echo "Pass a tag (claude-resume-tag <tag>) or install fzf for the picker." >&2
+    exit 1
+  fi
+  choice=$(
+    jq -r '
+      [.ended_at[0:10], (.tag // "-"), (.cwd | split("/") | last), (.first_msg // "")[0:60], .session_id]
+      | @tsv
+    ' "$INDEX" | tac | column -t -s $'\t' | fzf --prompt="Resume session > "
+  ) || exit 1
+  sid=$(printf '%s' "$choice" | awk '{print $NF}')
+fi
+
+exec claude --resume "$sid"

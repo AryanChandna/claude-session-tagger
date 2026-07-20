@@ -1,0 +1,14 @@
+{
+  "name": "session-tagger-marketplace",
+  "owner": {
+    "name": "Aryan Chandna",
+    "url": "https://github.com/AryanChandna"
+  },
+  "plugins": [
+    {
+      "name": "session-tagger",
+      "source": "./",
+      "description": "Tag Claude Code sessions and resume them by tag."
+    }
+  ]
+}

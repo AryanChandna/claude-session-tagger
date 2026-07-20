@@ -1,0 +1,13 @@
+{
+  "name": "session-tagger",
+  "version": "0.1.0",
+  "description": "Tag Claude Code sessions with human-readable names and resume them later by tag instead of opaque session IDs.",
+  "author": {
+    "name": "Aryan Chandna",
+    "url": "https://github.com/AryanChandna"
+  },
+  "homepage": "https://github.com/AryanChandna/claude-session-tagger",
+  "repository": "https://github.com/AryanChandna/claude-session-tagger",
+  "license": "MIT",
+  "keywords": ["claude-code", "sessions", "resume", "tags", "productivity"]
+}
