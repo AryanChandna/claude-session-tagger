@@ -44,7 +44,7 @@ format_rows() {
     )
     | [.ended_at[0:10], (.tag // "-"), (.cwd | split("/") | last), (.first_msg // "")[0:60], .session_id]
     | @tsv
-  ' "$INDEX" | tac
+  ' "$INDEX" | awk '{a[NR]=$0} END{for(i=NR;i>=1;i--) print a[i]}'
 }
 
 if command -v fzf >/dev/null 2>&1; then
