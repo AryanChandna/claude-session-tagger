@@ -41,7 +41,7 @@ if [ -n "$transcript" ] && [ -f "$transcript" ]; then
         else "" end
     ' "$transcript" 2>/dev/null \
     | sed -E 's/^[[:space:]]+//' \
-    | grep -Ev '^<(command-|local-command-caveat|system-reminder)' \
+    | grep -Ev '^<(command-|local-command-|system-reminder|user-prompt-submit-hook)' \
     | grep -v '^$' \
     | head -1 \
     | tr '\n\r\t' '   ' \

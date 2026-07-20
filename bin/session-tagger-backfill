@@ -23,6 +23,22 @@ PROJECTS_DIR="$HOME/.claude/projects"
 mkdir -p "$INDEX_DIR"
 touch "$INDEX_FILE"
 
+# --rebuild: nuke all auto-tagged rows so they get re-created with the current
+# tag-derivation logic. Manual tags (tag_source == "manual") are preserved.
+# Useful when we improve the framework-message filter and want existing junky
+# tags cleaned up.
+REBUILD=0
+if [ "${1:-}" = "--rebuild" ]; then
+  REBUILD=1
+  shift
+  if [ -s "$INDEX_FILE" ]; then
+    kept=$(jq -c 'select(.tag_source == "manual")' "$INDEX_FILE" | wc -l | tr -d ' ')
+    tmp=$(mktemp "${INDEX_FILE}.XXXXXX")
+    jq -c 'select(.tag_source == "manual")' "$INDEX_FILE" > "$tmp" && mv "$tmp" "$INDEX_FILE"
+    echo "--rebuild: kept $kept manual-tagged row(s), dropped all auto-tagged rows for re-index." >&2
+  fi
+fi
+
 if [ ! -d "$PROJECTS_DIR" ]; then
   echo "No Claude Code project transcripts found at $PROJECTS_DIR." >&2
   exit 0
@@ -86,7 +102,7 @@ while IFS= read -r -d '' transcript; do
         else "" end
     ' "$transcript" 2>/dev/null \
       | sed -E 's/^[[:space:]]+//' \
-      | grep -Ev '^<(command-|local-command-caveat|system-reminder)' \
+      | grep -Ev '^<(command-|local-command-|system-reminder|user-prompt-submit-hook)' \
       | grep -v '^$' \
       | head -1 \
       | tr '\n\r\t' '   ' \
@@ -123,4 +139,25 @@ while IFS= read -r -d '' transcript; do
 done < <(find "$PROJECTS_DIR" -mindepth 2 -maxdepth 2 -name '*.jsonl' -type f -print0)
 
 echo "Scanned $scanned transcript(s), skipped $skipped already-indexed, added $new_count new." >&2
-echo "Total sessions in index: $(wc -l < "$INDEX_FILE" | tr -d ' ')" >&2
+
+# Also dedup any legacy duplicate rows (from pre-v0.1.8 sessions that resumed
+# and re-exited before the dedup fix took effect). Keeps the newest row per
+# session_id, preserving manual tags when present.
+before_dedup=$(wc -l < "$INDEX_FILE" | tr -d ' ')
+tmp=$(mktemp "${INDEX_FILE}.XXXXXX")
+jq -cs '
+  # Group by session_id, keep the newest ended_at, but if any row in the
+  # group has tag_source == "manual", prefer that row.
+  group_by(.session_id)
+  | map(
+      (map(select(.tag_source == "manual")) | last) //
+      (sort_by(.ended_at) | last)
+    )
+  | sort_by(.ended_at)[]
+' "$INDEX_FILE" > "$tmp" && mv "$tmp" "$INDEX_FILE"
+after_dedup=$(wc -l < "$INDEX_FILE" | tr -d ' ')
+if [ "$before_dedup" != "$after_dedup" ]; then
+  echo "Deduplicated $((before_dedup - after_dedup)) legacy duplicate row(s)." >&2
+fi
+
+echo "Total sessions in index: $after_dedup" >&2

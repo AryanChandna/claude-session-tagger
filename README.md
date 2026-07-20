@@ -53,7 +53,15 @@ The plugin only captures sessions that *end* after it's installed. To bring your
 session-tagger-backfill
 ```
 
-It scans `~/.claude/projects/`, extracts `cwd` and the first user message from each transcript, auto-derives a tag, and appends any sessions not yet in the index. Idempotent — safe to re-run anytime.
+It scans `~/.claude/projects/`, extracts `cwd` and the first user message from each transcript, auto-derives a tag, and appends any sessions not yet in the index. Idempotent — safe to re-run anytime. Also deduplicates any legacy duplicate rows in one pass.
+
+If you want to re-tag existing rows after a plugin upgrade improves the tag logic:
+
+```bash
+session-tagger-backfill --rebuild
+```
+
+That drops all auto-tagged rows (manual `/tag` entries are preserved) and re-indexes them from scratch with the current logic.
 
 ---
 

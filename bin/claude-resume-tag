@@ -48,12 +48,14 @@ format_rows() {
 }
 
 if command -v fzf >/dev/null 2>&1; then
-  # Incremental picker; pre-fill --query with any arg the user passed.
-  # --select-1: auto-pick if query narrows to exactly one match
-  # --exit-0:   exit non-zero if zero matches (no picker for no-hits)
+  # Pre-filter server-side (case-insensitive substring on tag OR first_msg)
+  # so the query is deterministic; fzf then refines within the pre-filtered
+  # set. Prevents fzf's loose fuzzy matching from picking unrelated rows.
+  # --select-1: auto-pick if exactly one row matches server-side.
+  # --exit-0:   don't open picker for zero matches.
   choice=$(
-    format_rows "" | column -t -s $'\t' \
-      | fzf --query="${1:-}" --prompt="resume > " \
+    format_rows "${1:-}" | column -t -s $'\t' \
+      | fzf --prompt="resume > " \
             --height=40% --reverse --no-sort --select-1 --exit-0
   ) || { echo "No sessions match '${1:-}'." >&2; exit 1; }
   sid=$(printf '%s' "$choice" | awk '{print $NF}')
