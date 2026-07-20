@@ -1,5 +1,8 @@
 {
   "name": "session-tagger-marketplace",
+  "metadata": {
+    "description": "Plugins for tagging and resuming Claude Code sessions."
+  },
   "owner": {
     "name": "Aryan Chandna",
     "url": "https://github.com/AryanChandna"
