@@ -32,30 +32,53 @@ if [ "${1:-}" = "--list" ]; then
   exit 0
 fi
 
-pick_sid() {
-  local tag="$1"
-  jq -r --arg t "$tag" 'select((.tag // "") == $t) | .session_id' "$INDEX" | tail -1
+format_rows() {
+  # jq → tsv rows, newest first. Optional filter: case-insensitive substring
+  # match on tag OR first_msg. Reads all args as the filter substring.
+  local q="${1:-}"
+  jq -r --arg q "$q" '
+    select(
+      $q == "" or
+      ((.tag // "")       | ascii_downcase | contains($q | ascii_downcase)) or
+      ((.first_msg // "") | ascii_downcase | contains($q | ascii_downcase))
+    )
+    | [.ended_at[0:10], (.tag // "-"), (.cwd | split("/") | last), (.first_msg // "")[0:60], .session_id]
+    | @tsv
+  ' "$INDEX" | tac
 }
 
-if [ $# -ge 1 ]; then
-  sid=$(pick_sid "$1")
-  if [ -z "$sid" ]; then
-    echo "No session found with tag '$1'." >&2
-    echo "Try: claude-resume-tag --list $1" >&2
-    exit 1
-  fi
-else
-  if ! command -v fzf >/dev/null 2>&1; then
-    echo "Pass a tag (claude-resume-tag <tag>) or install fzf for the picker." >&2
-    exit 1
-  fi
+if command -v fzf >/dev/null 2>&1; then
+  # Incremental picker; pre-fill --query with any arg the user passed.
   choice=$(
-    jq -r '
-      [.ended_at[0:10], (.tag // "-"), (.cwd | split("/") | last), (.first_msg // "")[0:60], .session_id]
-      | @tsv
-    ' "$INDEX" | tac | column -t -s $'\t' | fzf --prompt="Resume session > "
+    format_rows "" | column -t -s $'\t' \
+      | fzf --query="${1:-}" --prompt="resume > " --height=40% --reverse --no-sort
   ) || exit 1
   sid=$(printf '%s' "$choice" | awk '{print $NF}')
+else
+  # No fzf: substring match, numbered picker if multiple hits.
+  mapfile -t rows < <(format_rows "${1:-}")
+  count=${#rows[@]}
+  if [ "$count" -eq 0 ]; then
+    echo "No sessions match '${1:-}'. Try: claude-resume-tag --list" >&2
+    exit 1
+  elif [ "$count" -eq 1 ]; then
+    sid=$(printf '%s' "${rows[0]}" | awk -F'\t' '{print $NF}')
+  else
+    echo "Multiple matches for '${1:-}' — pick one:" >&2
+    i=1
+    for r in "${rows[@]}"; do
+      printf '  %2d. %s\n' "$i" "$(printf '%s' "$r" | column -t -s $'\t')" >&2
+      i=$((i+1))
+    done
+    printf 'number> ' >&2
+    read -r n
+    if ! [[ "$n" =~ ^[0-9]+$ ]] || [ "$n" -lt 1 ] || [ "$n" -gt "$count" ]; then
+      echo "invalid selection" >&2
+      exit 1
+    fi
+    sid=$(printf '%s' "${rows[n-1]}" | awk -F'\t' '{print $NF}')
+  fi
+  echo "(install fzf for an interactive picker: brew install fzf)" >&2
 fi
 
 exec claude --resume "$sid"
